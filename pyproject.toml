@@ -1,0 +1,30 @@
+[project]
+name = "py-tilix"
+version = "0.1.0"
+description = "Generate crisp isometric pixel art shapes with a TiliX-inspired grid"
+readme = "README.md"
+authors = [
+    { name = "Bence Dányi", email = "bence@danyi.me" }
+]
+requires-python = ">=3.12"
+dependencies = ["pillow>=12.0"]
+
+[dependency-groups]
+dev = ["pytest>=9.0", "ruff>=0.17"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tilix"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
