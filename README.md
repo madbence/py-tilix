@@ -25,7 +25,7 @@ uv sync --locked
 uv run python examples/gallery.py
 ```
 
-The example saves six transparent sprites and a gallery to `output/`. The cube,
+The example saves eight transparent sprites and a gallery to `output/`. The cube,
 block, combined ramps, and stairs each have a one-block base: 4×4 cells, each cell a
 square of 7×7 dual pixels. Their heights vary independently of the base footprint.
 A second cube, saved as `cell_cube.png`, measures 1×1×1 cells and appears beside
@@ -38,6 +38,11 @@ exposed surfaces, so hidden side edges do not show through adjacent ramps.
 The wall example, `wall.png`, is one block long with a full-block base width.
 Its base and sloped transition are each two cells high; the centered upper wall
 is half a block wide and four cells high, giving a total height of eight cells.
+The narrower variant, `wall_narrow.png`, has a three-cell base width and a
+one-cell top width, with the same length and 2 + 2 + 4 cell heights.
+The third variant, `wall_thin.png`, reduces the base width to two cells and keeps
+the one-cell top width and one-block length. Its base, slope, and top heights are
+2 + 1 + 5 cells, giving a total height of eight cells.
 
 ## Use the library
 

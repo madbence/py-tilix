@@ -55,6 +55,22 @@ def main() -> None:
             top_width=BLOCK_CELLS / 2,
             top_height=4,
         ),
+        "wall_narrow": wall(
+            length=BLOCK_CELLS,
+            base_width=3,
+            base_height=2,
+            slope_height=2,
+            top_width=1,
+            top_height=4,
+        ),
+        "wall_thin": wall(
+            length=BLOCK_CELLS,
+            base_width=2,
+            base_height=2,
+            slope_height=1,
+            top_width=1,
+            top_height=5,
+        ),
     }
     ramp_palette = Palette(
         top="#b8c5ff", left="#8798de", right="#616ca8", outline="#343d60"
@@ -66,10 +82,14 @@ def main() -> None:
         ramp_palette,
         Palette(top="#f4a4b4", left="#d77799", right="#a9537f", outline="#513c58"),
         Palette(top="#d4d9e2", left="#9aa6ba", right="#697b96", outline="#354255"),
+        Palette(top="#d4d9e2", left="#9aa6ba", right="#697b96", outline="#354255"),
+        Palette(top="#d4d9e2", left="#9aa6ba", right="#697b96", outline="#354255"),
     ]
     labels = {
         "cell_cube": "cube (1 cell)",
         "ramps": "8 ramps",
+        "wall_narrow": "wall (3 / 1 cells)",
+        "wall_thin": "wall (2 / 1 cells)",
     }
     sprites = [
         render(shape, palette=palette)
