@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from tilix import Face, Palette, Shape, block, cube, ramp, render, stairs
+from tilix import Face, Palette, Shape, block, cube, ramp, render, stairs, wall
 
 BLOCK_CELLS = 4
 RAMP_COUNT = 8
@@ -47,6 +47,14 @@ def main() -> None:
         "block": block(width=BLOCK_CELLS, depth=BLOCK_CELLS, height=2),
         "ramps": ramp_group(),
         "stairs": stairs(width=BLOCK_CELLS, depth=BLOCK_CELLS, height=4),
+        "wall": wall(
+            length=BLOCK_CELLS,
+            base_width=BLOCK_CELLS,
+            base_height=2,
+            slope_height=2,
+            top_width=BLOCK_CELLS / 2,
+            top_height=4,
+        ),
     }
     ramp_palette = Palette(
         top="#b8c5ff", left="#8798de", right="#616ca8", outline="#343d60"
@@ -57,22 +65,25 @@ def main() -> None:
         Palette(top="#ffc980", left="#e69958", right="#b76843", outline="#493a44"),
         ramp_palette,
         Palette(top="#f4a4b4", left="#d77799", right="#a9537f", outline="#513c58"),
+        Palette(top="#d4d9e2", left="#9aa6ba", right="#697b96", outline="#354255"),
     ]
     labels = {
         "cell_cube": "cube (1 cell)",
         "ramps": "8 ramps",
     }
-    gallery = Image.new("RGBA", (len(shapes) * 140, 160), "#202830")
+    sprites = [
+        render(shape, palette=palette)
+        for shape, palette in zip(shapes.values(), palettes, strict=True)
+    ]
+    baseline = max(120, max(sprite.height for sprite in sprites) + 12)
+    gallery = Image.new("RGBA", (len(shapes) * 140, baseline + 40), "#202830")
     draw = ImageDraw.Draw(gallery)
-    for i, ((name, shape), palette) in enumerate(
-        zip(shapes.items(), palettes, strict=True)
-    ):
-        sprite = render(shape, palette=palette)
+    for i, (name, sprite) in enumerate(zip(shapes, sprites, strict=True)):
         sprite.save(output / f"{name}.png")
-        x, y = i * 140 + (140 - sprite.width) // 2, 120 - sprite.height
+        x, y = i * 140 + (140 - sprite.width) // 2, baseline - sprite.height
         gallery.alpha_composite(sprite, (x, y))
         label = labels.get(name, name)
-        draw.text((i * 140 + 70, 138), label, fill="#dbe4ec", anchor="mm")
+        draw.text((i * 140 + 70, baseline + 18), label, fill="#dbe4ec", anchor="mm")
     gallery = gallery.resize(
         (gallery.width * 2, gallery.height * 2), Image.Resampling.NEAREST
     )

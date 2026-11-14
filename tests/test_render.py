@@ -3,7 +3,7 @@ from fractions import Fraction
 import pytest
 from PIL import Image
 
-from tilix import Face, Grid, Palette, Shape, block, cube, ramp, render, stairs
+from tilix import Face, Grid, Palette, Shape, block, cube, ramp, render, stairs, wall
 
 
 def test_projection_axes_and_negative_coordinates():
@@ -117,7 +117,20 @@ def test_clipped_corners_preserve_an_opaque_background_at_integer_scale():
     assert image.getpixel((3, 7 * 3)) == Palette().outline
 
 
-@pytest.mark.parametrize("shape", [cube(), block(2, 3, 1), ramp(), stairs()])
+@pytest.mark.parametrize(
+    "shape",
+    [
+        cube(),
+        block(2, 3, 1),
+        ramp(),
+        stairs(),
+        wall(),
+        wall(base_height=4, slope_height=4, top_height=8),
+        wall(slope_height=Fraction(1, 2)),
+        wall(length=1, base_width=6, slope_height=1),
+        wall(slope_height=Fraction(1, 2), top_height=Fraction(1, 3)),
+    ],
+)
 def test_shapes_have_no_transparent_holes_in_their_scanlines(shape):
     image = render(shape, padding=0)
     alpha = image.getchannel("A")
@@ -131,6 +144,20 @@ def test_one_step_stairs_render_as_a_block():
     assert (
         render(stairs(2, 3, 4, steps=1)).tobytes() == render(block(2, 3, 4)).tobytes()
     )
+
+
+def test_equal_width_wall_renders_as_a_block_without_tier_seams():
+    actual = render(wall(length=3, base_width=2, top_width=2))
+    expected = render(block(3, 2, 4))
+    assert actual.size == expected.size
+    assert actual.tobytes() == expected.tobytes()
+
+
+def test_wall_example_renders_at_full_height():
+    image = render(wall(base_height=2, slope_height=2, top_height=4), padding=0)
+    assert image.mode == "RGBA"
+    assert image.size == (97, 139)
+    assert image.getchannel("A").getbbox() == (0, 0, 97, 139)
 
 
 def test_fractional_cells_render_at_the_equivalent_native_resolution():

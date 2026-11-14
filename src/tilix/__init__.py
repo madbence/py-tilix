@@ -1,6 +1,6 @@
 """Isometric pixel art primitives on a TiliX-inspired grid."""
 
-from tilix.geometry import Face, Point3, Shape, block, cube, ramp, stairs
+from tilix.geometry import Face, Point3, Shape, block, cube, ramp, stairs, wall
 from tilix.render import Grid, Palette, render
 
 __all__ = [
@@ -14,4 +14,5 @@ __all__ = [
     "ramp",
     "render",
     "stairs",
+    "wall",
 ]

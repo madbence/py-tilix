@@ -2,10 +2,10 @@ from fractions import Fraction
 
 import pytest
 
-from tilix import Face, Shape, block, cube, ramp, stairs
+from tilix import Face, Shape, block, cube, ramp, stairs, wall
 
 
-@pytest.mark.parametrize("factory", [cube, block, ramp, stairs])
+@pytest.mark.parametrize("factory", [cube, block, ramp, stairs, wall])
 def test_default_dimensions(factory):
     points = [p for face in factory().faces for p in face.vertices]
     assert tuple(min(p[i] for p in points) for i in range(3)) == (0, 0, 0)
@@ -47,6 +47,62 @@ def test_translation_preserves_the_original_shape():
     moved = original.translated(-2, 3, Fraction(1, 2))
     assert original.faces[-1].vertices[0] == (0, 0, 1)
     assert moved.faces[-1].vertices[0] == (-2, 3, Fraction(3, 2))
+
+
+def test_wall_has_a_centered_top_and_three_consecutive_tiers():
+    end, base, slope, upper, top = wall(
+        length=4,
+        base_width=4,
+        base_height=4,
+        slope_height=4,
+        top_width=2,
+        top_height=8,
+    ).faces
+    assert end.vertices == (
+        (4, 0, 0),
+        (4, 4, 0),
+        (4, 4, 4),
+        (4, 3, 8),
+        (4, 3, 16),
+        (4, 1, 16),
+        (4, 1, 8),
+        (4, 0, 4),
+    )
+    assert {p[2] for p in base.vertices} == {0, 4}
+    assert {(p[1], p[2]) for p in slope.vertices} == {(4, 4), (3, 8)}
+    assert {p[2] for p in upper.vertices} == {8, 16}
+    assert {p[1] for p in top.vertices} == {1, 3}
+    assert {p[2] for p in top.vertices} == {16}
+
+
+def test_wall_preserves_exact_fractional_dimensions():
+    shape = wall(base_width=1, top_width=Fraction(1, 3))
+    assert {p[1] for p in shape.faces[-1].vertices} == {
+        Fraction(1, 3),
+        Fraction(2, 3),
+    }
+
+
+def test_shallow_wall_shoulder_is_clipped_behind_the_upper_wall():
+    shoulder = wall(slope_height=Fraction(1, 2)).faces[0]
+    assert shoulder.shade == "top"
+    assert set(shoulder.vertices) == {(4, 0, 1), (4, 1, Fraction(3, 2)), (3, 0, 1)}
+
+
+@pytest.mark.parametrize(
+    "dimension",
+    ["length", "base_width", "base_height", "slope_height", "top_width", "top_height"],
+)
+@pytest.mark.parametrize("value", [0, -1, float("inf"), float("nan"), True, "4", None])
+def test_wall_validates_every_dimension(dimension, value):
+    error = TypeError if value is None or isinstance(value, (bool, str)) else ValueError
+    with pytest.raises(error, match=dimension):
+        wall(**{dimension: value})
+
+
+def test_wall_rejects_an_overhanging_top():
+    with pytest.raises(ValueError, match="top_width"):
+        wall(base_width=2, top_width=3)
 
 
 @pytest.mark.parametrize("factory", [cube, block, ramp, stairs])

@@ -2,7 +2,7 @@
 
 A Python library for generating isometric pixel art shapes. Create reusable
 geometry, choose a grid and palette, and render crisp RGBA images with Pillow.
-Includes cubes, rectangular blocks, ramps, and solid stairs.
+Includes cubes, rectangular blocks, ramps, solid stairs, and tapered walls.
 
 ![Generated shape gallery](docs/gallery.png)
 
@@ -25,7 +25,7 @@ uv sync --locked
 uv run python examples/gallery.py
 ```
 
-The example saves five transparent sprites and a gallery to `output/`. The cube,
+The example saves six transparent sprites and a gallery to `output/`. The cube,
 block, combined ramps, and stairs each have a one-block base: 4×4 cells, each cell a
 square of 7×7 dual pixels. Their heights vary independently of the base footprint.
 A second cube, saved as `cell_cube.png`, measures 1×1×1 cells and appears beside
@@ -35,6 +35,9 @@ The eight ramps are composed into one sprite, `ramps.png`. Each ramp is 1/8 bloc
 single 4×4-cell base. Their heights descend from one block to 1/8 block in
 1/8-block steps. The composition uses a shared ground plane and draws only
 exposed surfaces, so hidden side edges do not show through adjacent ramps.
+The wall example, `wall.png`, is one block long with a full-block base width.
+Its base and sloped transition are each two cells high; the centered upper wall
+is half a block wide and four cells high, giving a total height of eight cells.
 
 ## Use the library
 
@@ -69,6 +72,30 @@ toward y=depth. Dimensions must be positive and finite.
 | `block(width=4, depth=4, height=4)` | Independent dimensions | Rectangular block |
 | `ramp(width=4, depth=4, height=4)` | Independent dimensions | Solid sloping wedge |
 | `stairs(width=4, depth=4, height=4, *, steps=4)` | Dimensions and positive integer step count | Equal treads and risers |
+| `wall(length=4, *, base_width=4, base_height=1, slope_height=1, top_width=2, top_height=2)` | Length, two widths, and three tier heights | Centered upper wall with sloping shoulders |
+
+Walls run along +x; their width runs along y. The upper wall is centered on the
+base, with `top_width <= base_width`. Heights add together; equal widths produce
+a rectangular block without tier seams. For the gallery's 2 + 2 + 4 cell example
+(one block is four cells):
+
+```python
+from tilix import render, wall
+
+shape = wall(
+    length=4,
+    base_width=4,
+    base_height=2,
+    slope_height=2,
+    top_width=2,
+    top_height=4,
+)
+render(shape).save("wall.png")
+```
+
+For shallow slopes, visible parts of the far shoulder are clipped against the
+upper wall. These intersections, like the centered top's corners, must align
+with the chosen render grid.
 
 Shapes are immutable and independent of resolution. `shape.translated(x, y, z)`
 returns a new shape. Since rendering automatically crops to its bounds, translating

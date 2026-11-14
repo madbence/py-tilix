@@ -97,6 +97,116 @@ def cube(size: Scalar = 4) -> Shape:
     return block(size, size, size)
 
 
+def wall(
+    length: Scalar = 4,
+    *,
+    base_width: Scalar = 4,
+    base_height: Scalar = 1,
+    slope_height: Scalar = 1,
+    top_width: Scalar = 2,
+    top_height: Scalar = 2,
+) -> Shape:
+    """A wall along +x with a centered, narrower top and sloping shoulders.
+
+    All dimensions are in cells. The base spans y=0 to base_width; the top
+    is centered across that width. Heights describe three consecutive tiers:
+    vertical base, sloping transition, and vertical top. Total height is
+    base_height + slope_height + top_height. All dimensions must be positive,
+    and top_width must not exceed base_width. Equal widths form a plain block.
+    """
+    length = _positive(length, "length")
+    base_width = _positive(base_width, "base_width")
+    base_height = _positive(base_height, "base_height")
+    slope_height = _positive(slope_height, "slope_height")
+    top_width = _positive(top_width, "top_width")
+    top_height = _positive(top_height, "top_height")
+    if top_width > base_width:
+        raise ValueError("top_width must not exceed base_width")
+
+    shoulder = base_height + slope_height
+    height = shoulder + top_height
+    if top_width == base_width:
+        return block(length, base_width, height)
+    far_y = (base_width - top_width) / 2
+    near_y = (base_width + top_width) / 2
+    faces = []
+    if slope_height < far_y:
+        # A shallow far shoulder peeks out around the upper wall. Clip its
+        # hidden part against the upper wall's far top edge and end corner.
+        cutoff = far_y - top_height / (1 - slope_height / far_y)
+        end_y = max(Fraction(0), cutoff, far_y - length)
+        end_x = length - far_y + end_y
+        shoulder_points = [(length, 0), (length, far_y), (end_x, end_y)]
+        if cutoff > 0 and end_x > 0:
+            shoulder_points.append((0, cutoff))
+        if end_y > 0:
+            shoulder_points.append((0, 0))
+        faces.append(
+            Face(
+                tuple(
+                    (x, y, base_height + slope_height * y / far_y)
+                    for x, y in shoulder_points
+                ),
+                "top",
+            )
+        )
+    return Shape(
+        (
+            *faces,
+            # One end profile avoids internal seams between the three tiers.
+            Face(
+                (
+                    (length, 0, 0),
+                    (length, base_width, 0),
+                    (length, base_width, base_height),
+                    (length, near_y, shoulder),
+                    (length, near_y, height),
+                    (length, far_y, height),
+                    (length, far_y, shoulder),
+                    (length, 0, base_height),
+                ),
+                "right",
+            ),
+            Face(
+                (
+                    (0, base_width, 0),
+                    (length, base_width, 0),
+                    (length, base_width, base_height),
+                    (0, base_width, base_height),
+                ),
+                "left",
+            ),
+            Face(
+                (
+                    (0, base_width, base_height),
+                    (length, base_width, base_height),
+                    (length, near_y, shoulder),
+                    (0, near_y, shoulder),
+                ),
+                "top",
+            ),
+            Face(
+                (
+                    (0, near_y, shoulder),
+                    (length, near_y, shoulder),
+                    (length, near_y, height),
+                    (0, near_y, height),
+                ),
+                "left",
+            ),
+            Face(
+                (
+                    (0, far_y, height),
+                    (length, far_y, height),
+                    (length, near_y, height),
+                    (0, near_y, height),
+                ),
+                "top",
+            ),
+        )
+    )
+
+
 def ramp(width: Scalar = 4, depth: Scalar = 4, height: Scalar = 4) -> Shape:
     """A solid wedge, highest at y=0 and descending toward y=depth."""
     w, d, h = (
