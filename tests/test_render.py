@@ -1,4 +1,6 @@
 from fractions import Fraction
+from pathlib import Path
+from runpy import run_path
 
 import pytest
 from PIL import Image
@@ -138,6 +140,30 @@ def test_shapes_have_no_transparent_holes_in_their_scanlines(shape):
         filled = [x for x in range(image.width) if alpha.getpixel((x, y))]
         if filled:
             assert filled == list(range(min(filled), max(filled) + 1))
+
+
+@pytest.mark.parametrize("outline", ["black", None])
+def test_eight_touching_ramps_have_no_stray_face_pixels(outline):
+    gallery = run_path(str(Path(__file__).resolve().parents[1] / "examples/gallery.py"))
+    palette = Palette(outline=outline)
+    image = render(gallery["ramp_group"](), palette=palette, padding=1)
+
+    for y in range(1, image.height - 1):
+        for x in range(1, image.width - 1):
+            color = image.getpixel((x, y))
+            if color in (palette.top, palette.right):
+                assert any(
+                    image.getpixel((x + dx, y + dy)) == color
+                    for dx in (-1, 0, 1)
+                    for dy in (-1, 0, 1)
+                    if dx or dy
+                ), (x, y)
+
+    # The final ramp's bottom tip is exactly one dual pixel wide.
+    tip_row = image.getchannel("A").crop(
+        (0, image.height - 2, image.width, image.height - 1)
+    )
+    assert tip_row.getbbox() == (48, 0, 50, 1)
 
 
 def test_one_step_stairs_render_as_a_block():

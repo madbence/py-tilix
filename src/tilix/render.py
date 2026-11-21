@@ -1,5 +1,6 @@
 """Integer rasterization with 2:1 dual-pixel edges and right-pixel anchors."""
 
+from collections import defaultdict
 from dataclasses import dataclass
 from itertools import pairwise
 from math import isclose
@@ -11,6 +12,8 @@ from tilix.geometry import Point3, Shape, _point
 type Color = str | tuple[int, int, int] | tuple[int, int, int, int]
 type Pixel = tuple[int, int]
 type RGBA = tuple[int, int, int, int]
+type Edge = tuple[Pixel, Pixel]
+type Span = tuple[int, int]
 
 
 def _integer(value: int, name: str, minimum: int) -> int:
@@ -92,7 +95,7 @@ def _is_isometric(a: Pixel, b: Pixel) -> bool:
     return dy != 0 and abs(dx) == 2 * abs(dy)
 
 
-def _clipped_corners(edges: set[tuple[Pixel, Pixel]]) -> set[Pixel]:
+def _clipped_corners(edges: set[Edge]) -> set[Pixel]:
     """Find left silhouette joins where a full dual pixel would protrude."""
     neighbors: dict[Pixel, set[Pixel]] = {}
     for a, b in edges:
@@ -107,26 +110,91 @@ def _clipped_corners(edges: set[tuple[Pixel, Pixel]]) -> set[Pixel]:
     }
 
 
-def _edge(
-    draw: ImageDraw.ImageDraw,
-    a: Pixel,
-    b: Pixel,
-    color: RGBA,
-    clipped_corners: set[Pixel],
-) -> None:
+def _edge_rows(edge: Edge, clipped_corners: set[Pixel]) -> dict[int, Span]:
+    """Rasterize a left-to-right edge into inclusive horizontal spans."""
+    a, b = edge
+    x, y = a
+    dx, dy = b[0] - x, b[1] - y
+    rise = abs(dy)
+    direction = 1 if dy > 0 else -1
     if _is_isometric(a, b):
-        # Full dual pixels along diagonals; a left silhouette join with a
-        # vertical or other slope uses only its right-pixel anchor.
-        if a[1] > b[1]:
-            a, b = b, a
-        step = 2 if b[0] > a[0] else -2
-        for row in range(b[1] - a[1] + 1):
-            x, y = a[0] + row * step, a[1] + row
-            left = x if (x, y) in clipped_corners else x - 1
-            draw.line(((left, y), (x, y)), fill=color)
-    else:
-        # Ramps may have slopes other than the ground-plane 2:1 directions.
-        draw.line((a, b), fill=color, width=1)
+        anchors = ((x + 2 * row, y + direction * row) for row in range(rise + 1))
+        return {
+            py: (px if (px, py) in clipped_corners else px - 1, px)
+            for px, py in anchors
+        }
+    if dy == 0:
+        return {y: (x, b[0])}
+
+    # Use one direction for rounding ties on edges shared by multiple faces.
+    if rise >= dx:
+        rows = {}
+        for row in range(rise + 1):
+            px = x + (row * dx + rise // 2) // rise
+            rows[y + direction * row] = (px, px)
+        return rows
+
+    rows = {}
+    for col in range(dx + 1):
+        px = x + col
+        py = y + direction * ((col * rise + dx // 2) // dx)
+        first, _ = rows.get(py, (px, px))
+        rows[py] = (first, px)
+    return rows
+
+
+def _face_crossings(
+    face_edges: tuple[Edge, ...], edge_rows: dict[Edge, dict[int, Span]]
+) -> dict[int, list[Edge]]:
+    crossings = defaultdict(list)
+    for edge in face_edges:
+        # Count each crossing over a half-open interval at shared vertices.
+        end_y = max(edge[0][1], edge[1][1])
+        for y in edge_rows[edge]:
+            if y < end_y:
+                crossings[y].append(edge)
+    for y, edges in crossings.items():
+        edges.sort(key=lambda edge: edge_rows[edge][y])
+    return crossings
+
+
+def _close_triangle_tips(
+    crossings: dict[int, list[Edge]],
+    edge_rows: dict[Edge, dict[int, Span]],
+) -> None:
+    if not crossings:
+        return
+    gaps = {
+        y: (edge_rows[left][y][1] + 1, edge_rows[right][y][0] - 1)
+        for y, (left, right) in crossings.items()
+    }
+    widest = max(gaps, key=lambda y: gaps[y][1] - gaps[y][0])
+    first_left, first_right = gaps[widest]
+    if first_left > first_right:
+        return
+
+    # Once two borders pinch off a triangular face, join them through the
+    # remaining taper so rounding does not reopen disconnected color pockets.
+    for end, direction in ((min(gaps) - 1, -1), (max(gaps) + 1, 1)):
+        previous_left, previous_right = first_left, first_right
+        connected = True
+        for y in range(widest + direction, end, direction):
+            left, right = gaps[y]
+            connected = (
+                connected
+                and left <= right
+                and left <= previous_right + 1
+                and right >= previous_left - 1
+            )
+            if connected:
+                previous_left, previous_right = left, right
+            else:
+                # Neighboring faces use the merged coverage too, even when
+                # their shared borders are drawn in face colors.
+                left_edge, right_edge = crossings[y]
+                a, b = edge_rows[left_edge][y], edge_rows[right_edge][y]
+                merged = (min(a[0], b[0]), max(a[1], b[1]))
+                edge_rows[left_edge][y] = edge_rows[right_edge][y] = merged
 
 
 def render(
@@ -147,40 +215,50 @@ def render(
     """
     _integer(padding, "padding", 0)
     _integer(scale, "scale", 1)
-    projected = [tuple(grid.project(p) for p in face.vertices) for face in shape.faces]
-    edges = {
-        (a, b) if a <= b else (b, a)
-        for polygon in projected
-        for a, b in pairwise((*polygon, polygon[0]))
-    }
+    polygons = [tuple(grid.project(p) for p in face.vertices) for face in shape.faces]
+    face_edges = [
+        tuple((a, b) if a <= b else (b, a) for a, b in pairwise((*poly, poly[0])))
+        for poly in polygons
+    ]
+    edges = {edge for perimeter in face_edges for edge in perimeter}
     clipped_corners = _clipped_corners(edges)
-    points = [p for face in projected for p in face]
-    min_x = min(x for x, _ in points)
-    left_endpoints = {min(a, b) for a, b in edges if _is_isometric(a, b)}
-    if any(p[0] == min_x and p not in clipped_corners for p in left_endpoints):
-        min_x -= 1  # room for an unclipped dual pixel, e.g. on a flat tile
-    max_x = max(x for x, _ in points)
-    min_y, max_y = min(y for _, y in points), max(y for _, y in points)
+    edge_rows = {edge: _edge_rows(edge, clipped_corners) for edge in edges}
+    for perimeter in face_edges:
+        if len(perimeter) == 3:
+            _close_triangle_tips(_face_crossings(perimeter, edge_rows), edge_rows)
+
+    min_x = min(left for rows in edge_rows.values() for left, _ in rows.values())
+    max_x = max(x for poly in polygons for x, _ in poly)
+    min_y = min(y for poly in polygons for _, y in poly)
+    max_y = max(y for poly in polygons for _, y in poly)
     image = Image.new(
         "RGBA",
         (max_x - min_x + 1 + padding * 2, max_y - min_y + 1 + padding * 2),
         _color(background),
     )
     draw = ImageDraw.Draw(image)
-    clipped_corners = {
-        (x - min_x + padding, y - min_y + padding) for x, y in clipped_corners
-    }
-    screen_edges: set[tuple[Pixel, Pixel]] = set()
-    for face, polygon in zip(shape.faces, projected, strict=True):
-        polygon = tuple((x - min_x + padding, y - min_y + padding) for x, y in polygon)
+    offset_x, offset_y = padding - min_x, padding - min_y
+
+    def draw_span(y: int, left: int, right: int, color: RGBA) -> None:
+        draw.line(
+            (left + offset_x, y + offset_y, right + offset_x, y + offset_y), color
+        )
+
+    for face, edges in zip(shape.faces, face_edges, strict=True):
         color = getattr(palette, face.shade)
-        draw.polygon(polygon, fill=color)
-        for a, b in pairwise((*polygon, polygon[0])):
-            _edge(draw, a, b, color, clipped_corners)
-            screen_edges.add((a, b) if a <= b else (b, a))
+        for edge in edges:
+            for y, (left, right) in edge_rows[edge].items():
+                draw_span(y, left, right, color)
+        for y, crossings in _face_crossings(edges, edge_rows).items():
+            pairs = zip(crossings[::2], crossings[1::2], strict=True)
+            for left_edge, right_edge in pairs:
+                left, right = edge_rows[left_edge][y][1], edge_rows[right_edge][y][0]
+                if right > left + 1:
+                    draw_span(y, left + 1, right - 1, color)
     if palette.outline is not None:
-        for a, b in sorted(screen_edges):
-            _edge(draw, a, b, palette.outline, clipped_corners)
+        for rows in edge_rows.values():
+            for y, (left, right) in rows.items():
+                draw_span(y, left, right, palette.outline)
     if scale != 1:
         image = image.resize(
             (image.width * scale, image.height * scale), Image.Resampling.NEAREST
