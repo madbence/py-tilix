@@ -25,7 +25,7 @@ uv sync --locked
 uv run python examples/gallery.py
 ```
 
-The example saves 22 transparent sprites and a gallery to `output/`. The cube,
+The example saves 20 transparent sprites and a gallery to `output/`. The cube,
 block, combined ramps, and stairs each have a one-block base: 4×4 cells, each cell a
 square of 7×7 dual pixels. Their heights vary independently of the base footprint.
 A second cube, saved as `cell_cube.png`, measures 1×1×1 cells and appears beside
@@ -35,17 +35,10 @@ The eight ramps are composed into one sprite, `ramps.png`. Each ramp is 1/8 bloc
 single 4×4-cell base. Their heights descend from one block to 1/8 block in
 1/8-block steps. The composition uses a shared ground plane and draws only
 exposed surfaces, so hidden side edges do not show through adjacent ramps.
-The wall example, `wall.png`, is one block long with a full-block base width.
-Its base and sloped transition are each two cells high; the centered upper wall
-is half a block wide and four cells high, giving a total height of eight cells.
-The narrower variant, `wall_narrow.png`, has a three-cell base width and a
-one-cell top width, with the same length and 2 + 2 + 4 cell heights.
-The third variant, `wall_thin.png`, reduces the base width to two cells and keeps
-the one-cell top width and one-block length. Its base, slope, and top heights are
-2 + 1 + 5 cells, giving a total height of eight cells.
-The gallery also includes `wall_y.png`, four tapered end pieces, four 90-degree
-corners, four T-joints, and a four-way join. Every wall sprite fits within one
-4×4-cell tile. The ends and joints use the same profile as `wall_thin.png`.
+The gallery includes two straight walls (`wall.png` and `wall_y.png`), four
+tapered ends, four 90-degree corners, four T-joints, and a four-way join. Each
+wall fits within one 4×4-cell tile. The base is 3 cells wide and 2 cells high,
+the taper is 1 cell high, and the top is 2 cells wide and 5 cells high.
 
 ## Use the library
 
@@ -85,26 +78,13 @@ toward y=depth. Dimensions must be positive and finite.
 
 Straight walls run along +x by default. Use `axis="y"` for the perpendicular
 wall. The upper wall is centered on the base, with `top_width <= base_width`.
-The three tier heights add together. Equal widths give a straight wall a
-rectangular profile. For the gallery's 2 + 2 + 4 cell example (one block is four
-cells), use:
+Both straight walls and joints default to the gallery's 3-cell base, 2-cell
+top, and 2 + 1 + 5 cell tier heights. Equal widths give a straight wall a
+rectangular profile.
 
-```python
-from tilix import render, wall
-
-shape = wall(
-    length=4,
-    base_width=4,
-    base_height=2,
-    slope_height=2,
-    top_width=2,
-    top_height=4,
-)
-render(shape).save("wall.png")
-```
-
-By default, joints are centered at `(2, 2)` with a two-cell base width and a
-one-cell top width. Each arm reaches its tile edge at coordinate 0 or 4.
+By default, joints are centered at `(2, 2)`. Each arm reaches its tile edge at
+coordinate 0 or 4. Shift a default straight wall by half a cell across its width
+to align its ends with a joint.
 Use `"+x"`, `"+y"`, `"-x"`, and `"-y"` to choose the edges where the wall
 connects to another tile. A single arm makes a wall end whose terminal face
 uses the same inset and tier heights as the sides. Two perpendicular arms
@@ -116,8 +96,8 @@ measures `base_width + 2 * length`.
 ```python
 from tilix import render, wall, wall_joint
 
-straight_x = wall(base_width=2, top_width=1).translated(y=1)
-straight_y = wall(axis="y", base_width=2, top_width=1).translated(x=1)
+straight_x = wall().translated(y=0.5)
+straight_y = wall(axis="y").translated(x=0.5)
 render(straight_x).save("wall_tile_x.png")
 render(straight_y).save("wall_tile_y.png")
 render(wall_joint("+x")).save("wall_end_positive_x.png")

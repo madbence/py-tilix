@@ -125,11 +125,11 @@ def wall(
     length: Scalar = 4,
     *,
     axis: WallAxis = "x",
-    base_width: Scalar = 4,
-    base_height: Scalar = 1,
+    base_width: Scalar = 3,
+    base_height: Scalar = 2,
     slope_height: Scalar = 1,
     top_width: Scalar = 2,
-    top_height: Scalar = 2,
+    top_height: Scalar = 5,
 ) -> Shape:
     """A wall along +x or +y with a centered, narrower top and sloping shoulders.
 
@@ -270,11 +270,11 @@ def _joint_perimeter(arms: tuple[WallDirection, ...]) -> tuple[tuple[int, int], 
 def wall_joint(
     *arms: WallDirection,
     length: Scalar | None = None,
-    base_width: Scalar = 2,
-    base_height: Scalar = 1,
+    base_width: Scalar = 3,
+    base_height: Scalar = 2,
     slope_height: Scalar = 1,
-    top_width: Scalar = 1,
-    top_height: Scalar = 2,
+    top_width: Scalar = 2,
+    top_height: Scalar = 5,
 ) -> Shape:
     """Build a tapered wall piece using arms '+x', '+y', '-x', or '-y'.
 

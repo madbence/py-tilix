@@ -6,11 +6,20 @@ import pytest
 from tilix import Face, Shape, block, cube, ramp, stairs, wall, wall_joint
 
 
-@pytest.mark.parametrize("factory", [cube, block, ramp, stairs, wall])
-def test_default_dimensions(factory):
+@pytest.mark.parametrize(
+    ("factory", "dimensions"),
+    [
+        (cube, (4, 4, 4)),
+        (block, (4, 4, 4)),
+        (ramp, (4, 4, 4)),
+        (stairs, (4, 4, 4)),
+        (wall, (4, 3, 8)),
+    ],
+)
+def test_default_dimensions(factory, dimensions):
     points = [p for face in factory().faces for p in face.vertices]
     assert tuple(min(p[i] for p in points) for i in range(3)) == (0, 0, 0)
-    assert tuple(max(p[i] for p in points) for i in range(3)) == (4, 4, 4)
+    assert tuple(max(p[i] for p in points) for i in range(3)) == dimensions
 
 
 def test_block_exposes_only_the_three_visible_surfaces():
@@ -85,7 +94,7 @@ def test_wall_preserves_exact_fractional_dimensions():
 
 
 def test_shallow_wall_shoulder_is_clipped_behind_the_upper_wall():
-    shoulder = wall(slope_height=Fraction(1, 2)).faces[0]
+    shoulder = wall(base_width=4, base_height=1, slope_height=Fraction(1, 2)).faces[0]
     assert shoulder.shade == "top"
     assert set(shoulder.vertices) == {(4, 0, 1), (4, 1, Fraction(3, 2)), (3, 0, 1)}
 
@@ -120,6 +129,10 @@ def test_perpendicular_wall_exchanges_the_ground_axes_and_side_shades():
 @pytest.mark.parametrize(
     "arms",
     [
+        ("+x",),
+        ("+y",),
+        ("-x",),
+        ("-y",),
         ("+x", "+y"),
         ("+y", "-x"),
         ("-x", "-y"),
@@ -137,23 +150,23 @@ def test_joint_fits_the_standard_tile_and_reaches_the_requested_edges(arms):
         0 <= x <= 4 and 0 <= y <= 4 for face in shape.faces for x, y, _ in face.vertices
     )
     roof = shape.faces[-1].vertices
-    assert {z for _, _, z in roof} == {4}
-    assert min(x for x, _, _ in roof) == (0 if "-x" in arms else Fraction(3, 2))
-    assert max(x for x, _, _ in roof) == (4 if "+x" in arms else Fraction(5, 2))
-    assert min(y for _, y, _ in roof) == (0 if "-y" in arms else Fraction(3, 2))
-    assert max(y for _, y, _ in roof) == (4 if "+y" in arms else Fraction(5, 2))
+    assert {z for _, _, z in roof} == {8}
+    assert min(x for x, _, _ in roof) == (0 if "-x" in arms else 1)
+    assert max(x for x, _, _ in roof) == (4 if "+x" in arms else 3)
+    assert min(y for _, y, _ in roof) == (0 if "-y" in arms else 1)
+    assert max(y for _, y, _ in roof) == (4 if "+y" in arms else 3)
     twice_area = sum(
         x * by - bx * y for (x, y, _), (bx, by, _) in pairwise((*roof, roof[0]))
     )
-    assert twice_area == 2 + 3 * len(arms)
+    assert twice_area == 8 + 4 * len(arms)
     assert wall_joint(*reversed(arms)) == shape
 
 
 @pytest.mark.parametrize(
-    ("axis", "index", "offset"), [("x", 0, (0, 1)), ("y", 1, (1, 0))]
+    ("axis", "index", "offset"), [("x", 0, (0, 0.5)), ("y", 1, (0.5, 0))]
 )
 def test_joint_ends_align_with_centered_straight_walls(axis, index, offset):
-    straight = wall(axis=axis, base_width=2, top_width=1).translated(*offset)
+    straight = wall(axis=axis).translated(*offset)
     corner = wall_joint("+x", "+y")
     (straight_end,) = [
         face for face in straight.faces if all(p[index] == 4 for p in face.vertices)
@@ -161,6 +174,16 @@ def test_joint_ends_align_with_centered_straight_walls(axis, index, offset):
     (corner_end,) = [
         face for face in corner.faces if all(p[index] == 4 for p in face.vertices)
     ]
+    assert {(p[1 - index], p[2]) for p in straight_end.vertices} == {
+        (0.5, 0),
+        (3.5, 0),
+        (0.5, 2),
+        (3.5, 2),
+        (1, 3),
+        (3, 3),
+        (1, 8),
+        (3, 8),
+    }
     assert set(corner_end.vertices) == set(straight_end.vertices)
     assert corner_end.shade == straight_end.shade
 
@@ -170,7 +193,7 @@ def test_joint_can_use_an_explicit_arm_extension_for_a_custom_tile():
     roof = shape.faces[-1].vertices
     for axis in (0, 1):
         assert min(p[axis] for p in roof) == 0
-        assert max(p[axis] for p in roof) == 8
+        assert max(p[axis] for p in roof) == 9
 
 
 def test_standard_joint_rejects_a_base_too_wide_for_its_arms():
@@ -190,7 +213,9 @@ def test_standard_joint_rejects_a_base_too_wide_for_its_arms():
 def test_wall_end_matches_the_joint_profile_and_tapers_at_the_terminal_face(
     arm, axis, tile_edge, base_end, top_end
 ):
-    profile = dict(base_width=2, top_width=1, slope_height=Fraction(1, 3))
+    profile = dict(
+        base_width=2, top_width=1, base_height=1, slope_height=Fraction(1, 3)
+    )
     shape = wall_joint(arm, **profile)
     cross = wall_joint("+x", "+y", "-x", "-y", **profile)
     vertices = {p for face in shape.faces for p in face.vertices}

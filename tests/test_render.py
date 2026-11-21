@@ -140,9 +140,9 @@ def test_clipped_corners_preserve_an_opaque_background_at_integer_scale():
         stairs(),
         wall(),
         wall(base_height=4, slope_height=4, top_height=8),
-        wall(slope_height=Fraction(1, 2)),
+        wall(base_width=4, slope_height=Fraction(1, 2)),
         wall(length=1, base_width=6, slope_height=1),
-        wall(slope_height=Fraction(1, 2), top_height=Fraction(1, 3)),
+        wall(base_width=4, slope_height=Fraction(1, 2), top_height=Fraction(1, 3)),
     ],
 )
 def test_shapes_have_no_transparent_holes_in_their_scanlines(shape):
@@ -186,30 +186,28 @@ def test_one_step_stairs_render_as_a_block():
 
 def test_equal_width_wall_renders_as_a_block_without_tier_seams():
     actual = render(wall(length=3, base_width=2, top_width=2))
-    expected = render(block(3, 2, 4))
+    expected = render(block(3, 2, 8))
     assert actual.size == expected.size
     assert actual.tobytes() == expected.tobytes()
 
 
 def test_wall_example_renders_at_full_height():
-    image = render(wall(base_height=2, slope_height=2, top_height=4), padding=0)
+    image = render(wall(), padding=0)
     assert image.mode == "RGBA"
-    assert image.size == (97, 139)
-    assert image.getchannel("A").getbbox() == (0, 0, 97, 139)
+    assert image.size == (85, 136)
+    assert image.getchannel("A").getbbox() == (0, 0, 85, 136)
 
 
 def test_cross_roof_and_front_cap_hide_edges_of_the_rear_arms():
     palette = Palette(top="red", left="green", right="blue", outline="black")
-    joint = wall_joint(
-        "+x", "+y", "-x", "-y", base_height=2, slope_height=1, top_height=5
-    )
+    joint = wall_joint("+x", "+y", "-x", "-y")
     image = render(joint, palette=palette, padding=0)
-    assert image.size == (73, 130)
-    assert image.getpixel((36, 15)) == palette.top
-    assert image.getpixel((24, 21)) == palette.top
-    assert image.getpixel((48, 21)) == palette.top
-    assert image.getpixel((60, 63)) == palette.right
-    assert image.getpixel((36, 57)) == palette.outline
+    assert image.size == (85, 136)
+    assert image.getpixel((42, 18)) == palette.top
+    assert image.getpixel((18, 24)) == palette.top
+    assert image.getpixel((66, 24)) == palette.top
+    assert image.getpixel((66, 42)) == palette.right
+    assert image.getpixel((42, 42)) == palette.outline
     assert (
         render(joint.translated(2, -3, 1), palette=palette, padding=0).tobytes()
         == image.tobytes()
