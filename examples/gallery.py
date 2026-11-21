@@ -67,6 +67,12 @@ def main() -> None:
         "wall_t_negative_x": ("-x", "+y", "-y"),
         "wall_t_negative_y": ("-y", "+x", "-x"),
     }
+    ends = {
+        "wall_end_positive_x": ("+x",),
+        "wall_end_positive_y": ("+y",),
+        "wall_end_negative_x": ("-x",),
+        "wall_end_negative_y": ("-y",),
+    }
     # Block-sized bases are 4×4 cells; cell_cube shows a single cell for comparison.
     shapes = {
         "cube": cube(size=BLOCK_CELLS),
@@ -85,7 +91,7 @@ def main() -> None:
         "wall_cross": wall_joint("+x", "+y", "-x", "-y", **thin_wall),
         **{
             name: wall_joint(*arms, **thin_wall)
-            for variants in (corners, tees)
+            for variants in (corners, tees, ends)
             for name, arms in variants.items()
         },
     }
@@ -115,6 +121,7 @@ def main() -> None:
         "wall_cross": "4-way join",
         **{name: f"corner {' '.join(arms)}" for name, arms in corners.items()},
         **{name: f"T stem {arms[0]}" for name, arms in tees.items()},
+        **{name: f"end from {arm}" for name, (arm,) in ends.items()},
     }
     sprites = {
         name: render(shape, palette=palettes.get(name, wall_palette))
@@ -125,6 +132,7 @@ def main() -> None:
         ("wall", "wall_y", "wall_narrow", "wall_thin", "wall_cross"),
         tuple(corners),
         tuple(tees),
+        tuple(ends),
     )
     column_width = max(sprite.width for sprite in sprites.values()) + 16
     width = max(map(len, rows)) * column_width

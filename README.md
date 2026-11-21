@@ -25,7 +25,7 @@ uv sync --locked
 uv run python examples/gallery.py
 ```
 
-The example saves 18 transparent sprites and a gallery to `output/`. The cube,
+The example saves 22 transparent sprites and a gallery to `output/`. The cube,
 block, combined ramps, and stairs each have a one-block base: 4×4 cells, each cell a
 square of 7×7 dual pixels. Their heights vary independently of the base footprint.
 A second cube, saved as `cell_cube.png`, measures 1×1×1 cells and appears beside
@@ -43,9 +43,9 @@ one-cell top width, with the same length and 2 + 2 + 4 cell heights.
 The third variant, `wall_thin.png`, reduces the base width to two cells and keeps
 the one-cell top width and one-block length. Its base, slope, and top heights are
 2 + 1 + 5 cells, giving a total height of eight cells.
-The gallery also includes `wall_y.png`, four 90-degree corners, four T-joints
-labeled by stem direction, and a four-way join. Every wall sprite fits within
-one 4×4-cell tile. The joints use the same profile as `wall_thin.png`.
+The gallery also includes `wall_y.png`, four tapered end pieces, four 90-degree
+corners, four T-joints, and a four-way join. Every wall sprite fits within one
+4×4-cell tile. The ends and joints use the same profile as `wall_thin.png`.
 
 ## Use the library
 
@@ -81,7 +81,7 @@ toward y=depth. Dimensions must be positive and finite.
 | `ramp(width=4, depth=4, height=4)` | Independent dimensions | Solid sloping wedge |
 | `stairs(width=4, depth=4, height=4, *, steps=4)` | Dimensions and positive integer step count | Equal treads and risers |
 | `wall(length=4, *, axis="x", …)` | Length, axis, two widths, and three tier heights | Straight wall with sloping shoulders |
-| `wall_joint(*arms, length=None, …)` | Arm directions, optional arm extension, widths, and tier heights | 90-degree corner, T-joint, or four-way cross |
+| `wall_joint(*arms, length=None, …)` | Arm directions, optional arm extension, widths, and tier heights | Tapered end, 90-degree corner, T-joint, or four-way cross |
 
 Straight walls run along +x by default. Use `axis="y"` for the perpendicular
 wall. The upper wall is centered on the base, with `top_width <= base_width`.
@@ -105,8 +105,10 @@ render(shape).save("wall.png")
 
 By default, joints are centered at `(2, 2)` with a two-cell base width and a
 one-cell top width. Each arm reaches its tile edge at coordinate 0 or 4.
-Use `"+x"`, `"+y"`, `"-x"`, and `"-y"` to choose the arms. Two perpendicular
-arms form a corner, three form a T, and all four form a cross. Each joint has a
+Use `"+x"`, `"+y"`, `"-x"`, and `"-y"` to choose the edges where the wall
+connects to another tile. A single arm makes a wall end whose terminal face
+uses the same inset and tier heights as the sides. Two perpendicular arms
+form a corner, three form a T, and all four form a cross. Each piece has a
 continuous roof and the renderer hides occluded edges. An explicit `length`
 sets the extension beyond the central square for a custom tile whose side
 measures `base_width + 2 * length`.
@@ -118,6 +120,7 @@ straight_x = wall(base_width=2, top_width=1).translated(y=1)
 straight_y = wall(axis="y", base_width=2, top_width=1).translated(x=1)
 render(straight_x).save("wall_tile_x.png")
 render(straight_y).save("wall_tile_y.png")
+render(wall_joint("+x")).save("wall_end_positive_x.png")
 render(wall_joint("+x", "+y")).save("corner.png")
 render(wall_joint("+x", "-x", "+y")).save("t_positive_y.png")
 render(wall_joint("+x", "-x", "+y", "-y")).save("cross.png")

@@ -276,18 +276,19 @@ def wall_joint(
     top_width: Scalar = 1,
     top_height: Scalar = 2,
 ) -> Shape:
-    """Join tapered walls in a 4×4-cell tile using '+x', '+y', '-x', or '-y'.
+    """Build a tapered wall piece using arms '+x', '+y', '-x', or '-y'.
 
-    Two adjacent arms make a 90-degree corner, three make a T, and four make
-    a cross. By default the joint is centered at (2, 2) and each arm reaches
-    the corresponding tile edge. Set length to specify the arm's extension
-    past the central base square and use a custom tile size. Widths and tier
-    heights follow the same convention as wall().
+    One arm makes an end piece with the same taper on its sides and terminal
+    face. Two adjacent arms make a 90-degree corner, three make a T, and four
+    make a cross. By default the center is (2, 2) in a 4×4-cell tile and each
+    arm reaches the corresponding tile edge. Set length to specify the arm's
+    extension past the central base square and use a custom tile size. Widths
+    and tier heights follow the same convention as wall().
     """
     if any(arm not in ("+x", "+y", "-x", "-y") for arm in arms):
         raise ValueError("arms must be '+x', '+y', '-x', or '-y'")
-    if not 2 <= len(arms) <= 4 or len(set(arms)) != len(arms):
-        raise ValueError("a wall joint needs two to four distinct arms")
+    if not 1 <= len(arms) <= 4 or len(set(arms)) != len(arms):
+        raise ValueError("a wall piece needs one to four distinct arms")
     if len(arms) == 2 and arms[0][1] == arms[1][1]:
         raise ValueError("a two-arm wall joint needs perpendicular arms")
     base_width, base_height, slope_height, top_width, top_height = _wall_profile(

@@ -178,7 +178,38 @@ def test_standard_joint_rejects_a_base_too_wide_for_its_arms():
         wall_joint("+x", "+y", base_width=4)
 
 
-@pytest.mark.parametrize("arms", [(), ("+x",), ("+y", "-y"), ("+x", "+x"), ("+x", "z")])
+@pytest.mark.parametrize(
+    ("arm", "axis", "tile_edge", "base_end", "top_end"),
+    [
+        ("+x", 0, 4, 1, Fraction(3, 2)),
+        ("+y", 1, 4, 1, Fraction(3, 2)),
+        ("-x", 0, 0, 3, Fraction(5, 2)),
+        ("-y", 1, 0, 3, Fraction(5, 2)),
+    ],
+)
+def test_wall_end_matches_the_joint_profile_and_tapers_at_the_terminal_face(
+    arm, axis, tile_edge, base_end, top_end
+):
+    profile = dict(base_width=2, top_width=1, slope_height=Fraction(1, 3))
+    shape = wall_joint(arm, **profile)
+    cross = wall_joint("+x", "+y", "-x", "-y", **profile)
+    vertices = {p for face in shape.faces for p in face.vertices}
+    assert all(0 <= x <= 4 and 0 <= y <= 4 for x, y, _ in vertices)
+    assert {p for p in vertices if p[axis] == tile_edge} == {
+        p for face in cross.faces for p in face.vertices if p[axis] == tile_edge
+    }
+    (terminal_shoulder,) = [
+        face
+        for face in shape.faces[:-1]
+        if face.shade == "top"
+        and {p[axis] for p in face.vertices if p[2] == 1} == {base_end}
+    ]
+    assert {p[2] for p in terminal_shoulder.vertices} == {1, Fraction(4, 3)}
+    assert {p[axis] for p in terminal_shoulder.vertices if p[2] > 1} == {top_end}
+    assert {p[axis] for p in shape.faces[-1].vertices} == {top_end, tile_edge}
+
+
+@pytest.mark.parametrize("arms", [(), ("+y", "-y"), ("+x", "+x"), ("+x", "z")])
 def test_joint_requires_distinct_arms_that_form_a_corner_t_or_cross(arms):
     with pytest.raises(ValueError, match="arm"):
         wall_joint(*arms)
