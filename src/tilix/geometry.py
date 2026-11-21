@@ -1,13 +1,18 @@
 """Immutable visible surfaces, measured in grid cells."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from fractions import Fraction
+from itertools import pairwise
 from math import isfinite
 from typing import Literal
 
 type Scalar = int | float | Fraction
 type Point3 = tuple[Scalar, Scalar, Scalar]
 type Shade = Literal["top", "left", "right"]
+type WallAxis = Literal["x", "y"]
+type WallDirection = Literal["+x", "+y", "-x", "-y"]
+
+_WALL_DIRECTIONS = {"+x": (1, 0), "+y": (0, 1), "-x": (-1, 0), "-y": (0, -1)}
 
 
 def _number(value: Scalar, name: str) -> Fraction:
@@ -56,6 +61,7 @@ class Shape:
     """Visible faces, ordered from back to front, independent of resolution."""
 
     faces: tuple[Face, ...]
+    _occlude: bool = field(default=False, kw_only=True, repr=False)
 
     def __post_init__(self) -> None:
         faces = tuple(self.faces)
@@ -68,11 +74,12 @@ class Shape:
     def translated(self, x: Scalar = 0, y: Scalar = 0, z: Scalar = 0) -> "Shape":
         """Return a copy moved by the given number of cells."""
         dx, dy, dz = _point((x, y, z))
-        return Shape(
-            tuple(
+        return replace(
+            self,
+            faces=tuple(
                 Face(tuple((a + dx, b + dy, c + dz) for a, b, c in f.vertices), f.shade)
                 for f in self.faces
-            )
+            ),
         )
 
 
@@ -97,24 +104,13 @@ def cube(size: Scalar = 4) -> Shape:
     return block(size, size, size)
 
 
-def wall(
-    length: Scalar = 4,
-    *,
-    base_width: Scalar = 4,
-    base_height: Scalar = 1,
-    slope_height: Scalar = 1,
-    top_width: Scalar = 2,
-    top_height: Scalar = 2,
-) -> Shape:
-    """A wall along +x with a centered, narrower top and sloping shoulders.
-
-    All dimensions are in cells. The base spans y=0 to base_width; the top
-    is centered across that width. Heights describe three consecutive tiers:
-    vertical base, sloping transition, and vertical top. Total height is
-    base_height + slope_height + top_height. All dimensions must be positive,
-    and top_width must not exceed base_width. Equal widths form a plain block.
-    """
-    length = _positive(length, "length")
+def _wall_profile(
+    base_width: Scalar,
+    base_height: Scalar,
+    slope_height: Scalar,
+    top_width: Scalar,
+    top_height: Scalar,
+) -> tuple[Fraction, Fraction, Fraction, Fraction, Fraction]:
     base_width = _positive(base_width, "base_width")
     base_height = _positive(base_height, "base_height")
     slope_height = _positive(slope_height, "slope_height")
@@ -122,11 +118,39 @@ def wall(
     top_height = _positive(top_height, "top_height")
     if top_width > base_width:
         raise ValueError("top_width must not exceed base_width")
+    return base_width, base_height, slope_height, top_width, top_height
+
+
+def wall(
+    length: Scalar = 4,
+    *,
+    axis: WallAxis = "x",
+    base_width: Scalar = 4,
+    base_height: Scalar = 1,
+    slope_height: Scalar = 1,
+    top_width: Scalar = 2,
+    top_height: Scalar = 2,
+) -> Shape:
+    """A wall along +x or +y with a centered, narrower top and sloping shoulders.
+
+    All dimensions are in cells. The base starts at the origin and the top
+    is centered across the width. Heights describe three consecutive tiers:
+    vertical base, sloping transition, and vertical top. Total height is
+    base_height + slope_height + top_height. All dimensions must be positive,
+    and top_width must not exceed base_width. Equal widths form a plain block.
+    """
+    if axis not in ("x", "y"):
+        raise ValueError("axis must be 'x' or 'y'")
+    length = _positive(length, "length")
+    base_width, base_height, slope_height, top_width, top_height = _wall_profile(
+        base_width, base_height, slope_height, top_width, top_height
+    )
 
     shoulder = base_height + slope_height
     height = shoulder + top_height
     if top_width == base_width:
-        return block(length, base_width, height)
+        w, d = (length, base_width) if axis == "x" else (base_width, length)
+        return block(w, d, height)
     far_y = (base_width - top_width) / 2
     near_y = (base_width + top_width) / 2
     faces = []
@@ -150,9 +174,8 @@ def wall(
                 "top",
             )
         )
-    return Shape(
+    faces.extend(
         (
-            *faces,
             # One end profile avoids internal seams between the three tiers.
             Face(
                 (
@@ -205,6 +228,125 @@ def wall(
             ),
         )
     )
+    if axis == "y":
+        shades = {"left": "right", "right": "left", "top": "top"}
+        faces = [
+            Face(tuple((y, x, z) for x, y, z in face.vertices), shades[face.shade])
+            for face in faces
+        ]
+    return Shape(tuple(faces))
+
+
+def _joint_perimeter(arms: tuple[WallDirection, ...]) -> tuple[tuple[int, int], ...]:
+    """Trace the union of the center square and arm cells on a 3×3 grid."""
+    edges = set()
+    for dx, dy in ((0, 0), *(_WALL_DIRECTIONS[arm] for arm in arms)):
+        x, y = dx + 1, dy + 1
+        a, b, c, d = (x, y), (x + 1, y), (x + 1, y + 1), (x, y + 1)
+        for start, end in ((a, b), (b, c), (c, d), (d, a)):
+            if (end, start) in edges:
+                edges.remove((end, start))
+            else:
+                edges.add((start, end))
+
+    successors = dict(edges)
+    first = min(successors)
+    perimeter = [first]
+    while (point := successors[perimeter[-1]]) != first:
+        perimeter.append(point)
+
+    return tuple(
+        point
+        for previous, point, following in zip(
+            perimeter[-1:] + perimeter[:-1],
+            perimeter,
+            perimeter[1:] + perimeter[:1],
+            strict=True,
+        )
+        if previous[0] != following[0] and previous[1] != following[1]
+    )
+
+
+def wall_joint(
+    *arms: WallDirection,
+    length: Scalar = 2,
+    base_width: Scalar = 4,
+    base_height: Scalar = 1,
+    slope_height: Scalar = 1,
+    top_width: Scalar = 2,
+    top_height: Scalar = 2,
+) -> Shape:
+    """Join tapered walls around (0, 0) using arms '+x', '+y', '-x', or '-y'.
+
+    Two adjacent arms make a 90-degree corner, three make a T, and four make
+    a cross. Each arm extends length cells past the central base square.
+    Widths and tier heights follow the same convention as wall().
+    """
+    if any(arm not in ("+x", "+y", "-x", "-y") for arm in arms):
+        raise ValueError("arms must be '+x', '+y', '-x', or '-y'")
+    if not 2 <= len(arms) <= 4 or len(set(arms)) != len(arms):
+        raise ValueError("a wall joint needs two to four distinct arms")
+    if len(arms) == 2 and arms[0][1] == arms[1][1]:
+        raise ValueError("a two-arm wall joint needs perpendicular arms")
+    length = _positive(length, "length")
+    base_width, base_height, slope_height, top_width, top_height = _wall_profile(
+        base_width, base_height, slope_height, top_width, top_height
+    )
+    shoulder = base_height + slope_height
+    height = shoulder + top_height
+    outer = base_width / 2
+    inner = top_width / 2
+    reach = outer + length
+    base_coords = (-reach, -outer, outer, reach)
+    top_coords = (-reach, -inner, inner, reach)
+    perimeter = _joint_perimeter(arms)
+    faces = []
+    for a, b in pairwise((*perimeter, perimeter[0])):
+        if a[0] == b[0]:
+            near, cap, shade = b[1] > a[1], a[0] in (0, 3), "right"
+        else:
+            near, cap, shade = b[0] < a[0], a[1] in (0, 3), "left"
+
+        ax, ay = base_coords[a[0]], base_coords[a[1]]
+        bx, by = base_coords[b[0]], base_coords[b[1]]
+        tx, ty = top_coords[a[0]], top_coords[a[1]]
+        ux, uy = top_coords[b[0]], top_coords[b[1]]
+        bottom = ((ax, ay, 0), (bx, by, 0))
+        base_top = ((ax, ay, base_height), (bx, by, base_height))
+        slope_top = ((tx, ty, shoulder), (ux, uy, shoulder))
+        roof = ((tx, ty, height), (ux, uy, height))
+
+        if outer == inner or cap:
+            if near:
+                if outer == inner:
+                    faces.append(Face((*bottom, *reversed(roof)), shade))
+                else:
+                    faces.append(
+                        Face(
+                            (
+                                *bottom,
+                                base_top[1],
+                                slope_top[1],
+                                *reversed(roof),
+                                slope_top[0],
+                                base_top[0],
+                            ),
+                            shade,
+                        )
+                    )
+        else:
+            if near:
+                faces.extend(
+                    (
+                        Face((*bottom, *reversed(base_top)), shade),
+                        Face((*slope_top, *reversed(roof)), shade),
+                    )
+                )
+            if near or slope_height < outer - inner:
+                faces.append(Face((*base_top, *reversed(slope_top)), "top"))
+    roof_vertices = tuple((top_coords[x], top_coords[y], height) for x, y in perimeter)
+    faces.append(Face(roof_vertices))
+    return Shape(tuple(faces), _occlude=True)
 
 
 def ramp(width: Scalar = 4, depth: Scalar = 4, height: Scalar = 4) -> Shape:

@@ -2,7 +2,7 @@
 
 A Python library for generating isometric pixel art shapes. Create reusable
 geometry, choose a grid and palette, and render crisp RGBA images with Pillow.
-Includes cubes, rectangular blocks, ramps, solid stairs, and tapered walls.
+Includes cubes, rectangular blocks, ramps, solid stairs, tapered walls, and wall joints.
 
 ![Generated shape gallery](docs/gallery.png)
 
@@ -25,7 +25,7 @@ uv sync --locked
 uv run python examples/gallery.py
 ```
 
-The example saves eight transparent sprites and a gallery to `output/`. The cube,
+The example saves 18 transparent sprites and a gallery to `output/`. The cube,
 block, combined ramps, and stairs each have a one-block base: 4×4 cells, each cell a
 square of 7×7 dual pixels. Their heights vary independently of the base footprint.
 A second cube, saved as `cell_cube.png`, measures 1×1×1 cells and appears beside
@@ -43,6 +43,8 @@ one-cell top width, with the same length and 2 + 2 + 4 cell heights.
 The third variant, `wall_thin.png`, reduces the base width to two cells and keeps
 the one-cell top width and one-block length. Its base, slope, and top heights are
 2 + 1 + 5 cells, giving a total height of eight cells.
+The gallery also includes `wall_y.png`, four 90-degree corners, four T-joints
+labeled by stem direction, and a four-way join.
 
 ## Use the library
 
@@ -77,12 +79,14 @@ toward y=depth. Dimensions must be positive and finite.
 | `block(width=4, depth=4, height=4)` | Independent dimensions | Rectangular block |
 | `ramp(width=4, depth=4, height=4)` | Independent dimensions | Solid sloping wedge |
 | `stairs(width=4, depth=4, height=4, *, steps=4)` | Dimensions and positive integer step count | Equal treads and risers |
-| `wall(length=4, *, base_width=4, base_height=1, slope_height=1, top_width=2, top_height=2)` | Length, two widths, and three tier heights | Centered upper wall with sloping shoulders |
+| `wall(length=4, *, axis="x", …)` | Length, axis, two widths, and three tier heights | Straight wall with sloping shoulders |
+| `wall_joint(*arms, length=2, …)` | Arm directions, arm length, and the same wall widths and tier heights | 90-degree corner, T-joint, or four-way cross |
 
-Walls run along +x; their width runs along y. The upper wall is centered on the
-base, with `top_width <= base_width`. Heights add together; equal widths produce
-a rectangular block without tier seams. For the gallery's 2 + 2 + 4 cell example
-(one block is four cells):
+Straight walls run along +x by default. Use `axis="y"` for the perpendicular
+wall. The upper wall is centered on the base, with `top_width <= base_width`.
+The three tier heights add together. Equal widths give a straight wall a
+rectangular profile. For the gallery's 2 + 2 + 4 cell example (one block is four
+cells), use:
 
 ```python
 from tilix import render, wall
@@ -98,9 +102,23 @@ shape = wall(
 render(shape).save("wall.png")
 ```
 
+Joints are centered at `(0, 0)`. Each arm extends `length` cells past the edge of
+the central base square. Use `"+x"`, `"+y"`, `"-x"`, and `"-y"` to choose the
+arms. Two perpendicular arms form a corner, three form a T, and all four form
+a cross. Each joint has a continuous roof and the renderer hides occluded edges.
+
+```python
+from tilix import render, wall, wall_joint
+
+render(wall(axis="y")).save("wall_y.png")
+render(wall_joint("+x", "+y")).save("corner.png")
+render(wall_joint("+x", "-x", "+y")).save("t_positive_y.png")
+render(wall_joint("+x", "-x", "+y", "-y")).save("cross.png")
+```
+
 For shallow slopes, visible parts of the far shoulder are clipped against the
-upper wall. These intersections, like the centered top's corners, must align
-with the chosen render grid.
+upper wall. For straight walls, these intersections must align with the chosen
+render grid, along with the other vertices.
 
 Shapes are immutable and independent of resolution. `shape.translated(x, y, z)`
 returns a new shape. Since rendering automatically crops to its bounds, translating
@@ -171,13 +189,11 @@ render(tile).save("tile.png")
 ```
 
 Provide visible polygon faces in drawing order, with vertices around each
-perimeter and a `top`, `left`, or `right` palette shade. This version renders
-individual shapes. It does not perform scene depth sorting, hidden-surface
-removal, mesh intersections, or boolean operations. All supplied faces and their
-edges are drawn. Built-in primitives supply the visible surfaces for the fixed
-camera. Isometric 2:1 edges use dual pixels; other ramp slopes use one-pixel raster
-lines. Rotate geometry and render again when adding orientations; mirroring a
-finished sprite would swap left and right pixel anchors.
+perimeter and a `top`, `left`, or `right` palette shade. The renderer draws all
+faces and edges supplied in a custom shape. Built-in wall joints resolve their
+own occlusion for the fixed camera. Isometric 2:1 edges use dual pixels, and
+other ramp slopes use one-pixel raster lines. Rotate geometry and render again
+when adding orientations to keep edges anchored to the right-hand grid pixels.
 
 ## Development
 

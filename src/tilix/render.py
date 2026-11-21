@@ -1,13 +1,15 @@
 """Integer rasterization with 2:1 dual-pixel edges and right-pixel anchors."""
 
 from collections import defaultdict
+from collections.abc import Iterator
 from dataclasses import dataclass
+from fractions import Fraction
 from itertools import pairwise
-from math import isclose
+from math import isclose, lcm
 
 from PIL import Image, ImageColor, ImageDraw
 
-from tilix.geometry import Point3, Shape, _point
+from tilix.geometry import Face, Point3, Shape, _point
 
 type Color = str | tuple[int, int, int] | tuple[int, int, int, int]
 type Pixel = tuple[int, int]
@@ -197,6 +199,97 @@ def _close_triangle_tips(
                 edge_rows[left_edge][y] = edge_rows[right_edge][y] = merged
 
 
+def _face_spans(
+    perimeter: tuple[Edge, ...], edge_rows: dict[Edge, dict[int, Span]]
+) -> Iterator[tuple[int, int, int]]:
+    for edge in perimeter:
+        for y, (left, right) in edge_rows[edge].items():
+            yield y, left, right
+    for y, crossings in _face_crossings(perimeter, edge_rows).items():
+        pairs = zip(crossings[::2], crossings[1::2], strict=True)
+        for left_edge, right_edge in pairs:
+            left, right = edge_rows[left_edge][y][1], edge_rows[right_edge][y][0]
+            if right > left + 1:
+                yield y, left + 1, right - 1
+
+
+def _depth_plane(
+    face: Face, polygon: tuple[Pixel, ...]
+) -> tuple[Fraction, Fraction, Fraction] | None:
+    """Express world z as an affine function of projected pixel coordinates."""
+    (x, y), *rest = polygon
+    z, *heights = (Fraction(vertex[2]) for vertex in face.vertices)
+    points = zip(rest, heights, strict=True)
+    for ((bx, by), bz), ((cx, cy), cz) in pairwise(points):
+        dx, dy, dz = bx - x, by - y, bz - z
+        ex, ey, ez = cx - x, cy - y, cz - z
+        det = dx * ey - dy * ex
+        if det:
+            ax = (dz * ey - dy * ez) / det
+            ay = (dx * ez - dz * ex) / det
+            return ax, ay, z - ax * x - ay * y
+    # Grid tolerance can make an almost edge-on face exactly edge-on.
+    return None
+
+
+def _draw_visible_faces(
+    image: Image.Image,
+    shape: Shape,
+    polygons: list[tuple[Pixel, ...]],
+    face_edges: list[tuple[Edge, ...]],
+    edge_rows: dict[Edge, dict[int, Span]],
+    palette: Palette,
+    offset_x: int,
+    offset_y: int,
+) -> None:
+    # A viewing ray increases x, y, and z together. Compare z exactly in
+    # integer units so a shared edge can win depth ties against a face fill.
+    planes = [
+        _depth_plane(face, polygon)
+        for face, polygon in zip(shape.faces, polygons, strict=True)
+    ]
+    units = 2 * lcm(
+        *(value.denominator for plane in planes if plane is not None for value in plane)
+    )
+    pixels = image.load()
+    width = image.width
+    depths: list[int | None] = [None] * (width * image.height)
+
+    def paint(
+        y: int,
+        left: int,
+        right: int,
+        color: RGBA,
+        plane: tuple[int, int, int],
+        *,
+        ink: bool = False,
+    ) -> None:
+        dx, dy, origin = plane
+        py = y + offset_y
+        row = py * width + offset_x
+        depth = origin + dy * y + dx * left + ink
+        for x in range(left, right + 1):
+            index = row + x
+            previous = depths[index]
+            if previous is None or depth >= previous:
+                depths[index] = depth
+                pixels[x + offset_x, py] = color
+            depth += dx
+
+    for face, perimeter, plane in zip(shape.faces, face_edges, planes, strict=True):
+        if plane is None:
+            continue
+        ax, ay, bias = plane
+        pixel_plane = int(ax * units), int(ay * units), int(bias * units)
+        color = getattr(palette, face.shade)
+        for y, left, right in _face_spans(perimeter, edge_rows):
+            paint(y, left, right, color, pixel_plane)
+        if palette.outline is not None:
+            for edge in perimeter:
+                for y, (left, right) in edge_rows[edge].items():
+                    paint(y, left, right, palette.outline, pixel_plane, ink=True)
+
+
 def render(
     shape: Shape,
     *,
@@ -236,29 +329,27 @@ def render(
         (max_x - min_x + 1 + padding * 2, max_y - min_y + 1 + padding * 2),
         _color(background),
     )
-    draw = ImageDraw.Draw(image)
     offset_x, offset_y = padding - min_x, padding - min_y
-
-    def draw_span(y: int, left: int, right: int, color: RGBA) -> None:
-        draw.line(
-            (left + offset_x, y + offset_y, right + offset_x, y + offset_y), color
+    if shape._occlude:
+        _draw_visible_faces(
+            image, shape, polygons, face_edges, edge_rows, palette, offset_x, offset_y
         )
+    else:
+        draw = ImageDraw.Draw(image)
 
-    for face, edges in zip(shape.faces, face_edges, strict=True):
-        color = getattr(palette, face.shade)
-        for edge in edges:
-            for y, (left, right) in edge_rows[edge].items():
+        def draw_span(y: int, left: int, right: int, color: RGBA) -> None:
+            draw.line(
+                (left + offset_x, y + offset_y, right + offset_x, y + offset_y), color
+            )
+
+        for face, perimeter in zip(shape.faces, face_edges, strict=True):
+            color = getattr(palette, face.shade)
+            for y, left, right in _face_spans(perimeter, edge_rows):
                 draw_span(y, left, right, color)
-        for y, crossings in _face_crossings(edges, edge_rows).items():
-            pairs = zip(crossings[::2], crossings[1::2], strict=True)
-            for left_edge, right_edge in pairs:
-                left, right = edge_rows[left_edge][y][1], edge_rows[right_edge][y][0]
-                if right > left + 1:
-                    draw_span(y, left + 1, right - 1, color)
-    if palette.outline is not None:
-        for rows in edge_rows.values():
-            for y, (left, right) in rows.items():
-                draw_span(y, left, right, palette.outline)
+        if palette.outline is not None:
+            for rows in edge_rows.values():
+                for y, (left, right) in rows.items():
+                    draw_span(y, left, right, palette.outline)
     if scale != 1:
         image = image.resize(
             (image.width * scale, image.height * scale), Image.Resampling.NEAREST

@@ -1,8 +1,9 @@
 from fractions import Fraction
+from itertools import pairwise
 
 import pytest
 
-from tilix import Face, Shape, block, cube, ramp, stairs, wall
+from tilix import Face, Shape, block, cube, ramp, stairs, wall, wall_joint
 
 
 @pytest.mark.parametrize("factory", [cube, block, ramp, stairs, wall])
@@ -103,6 +104,52 @@ def test_wall_validates_every_dimension(dimension, value):
 def test_wall_rejects_an_overhanging_top():
     with pytest.raises(ValueError, match="top_width"):
         wall(base_width=2, top_width=3)
+
+
+def test_perpendicular_wall_exchanges_the_ground_axes_and_side_shades():
+    settings = dict(length=6, base_width=3, top_width=1, slope_height=Fraction(1, 2))
+    original = wall(**settings)
+    rotated = wall(axis="y", **settings)
+    mirrored_shades = {"top": "top", "right": "left", "left": "right"}
+    assert rotated.faces == tuple(
+        Face(tuple((y, x, z) for x, y, z in face.vertices), mirrored_shades[face.shade])
+        for face in original.faces
+    )
+
+
+@pytest.mark.parametrize(
+    "arms",
+    [
+        ("+x", "+y"),
+        ("+y", "-x"),
+        ("-x", "-y"),
+        ("-y", "+x"),
+        ("+x", "+y", "-y"),
+        ("+y", "+x", "-x"),
+        ("-x", "+y", "-y"),
+        ("-y", "+x", "-x"),
+        ("+x", "+y", "-x", "-y"),
+    ],
+)
+def test_joint_roof_is_one_polygon_with_the_requested_arms(arms):
+    shape = wall_joint(*arms, length=3)
+    roof = shape.faces[-1].vertices
+    assert {z for _, _, z in roof} == {4}
+    assert min(x for x, _, _ in roof) == (-5 if "-x" in arms else -1)
+    assert max(x for x, _, _ in roof) == (5 if "+x" in arms else 1)
+    assert min(y for _, y, _ in roof) == (-5 if "-y" in arms else -1)
+    assert max(y for _, y, _ in roof) == (5 if "+y" in arms else 1)
+    twice_area = sum(
+        x * by - bx * y for (x, y, _), (bx, by, _) in pairwise((*roof, roof[0]))
+    )
+    assert twice_area == 2 * (2 * 2 + len(arms) * 4 * 2)
+    assert wall_joint(*reversed(arms), length=3) == shape
+
+
+@pytest.mark.parametrize("arms", [(), ("+x",), ("+y", "-y"), ("+x", "+x"), ("+x", "z")])
+def test_joint_requires_distinct_arms_that_form_a_corner_t_or_cross(arms):
+    with pytest.raises(ValueError, match="arm"):
+        wall_joint(*arms)
 
 
 @pytest.mark.parametrize("factory", [cube, block, ramp, stairs])

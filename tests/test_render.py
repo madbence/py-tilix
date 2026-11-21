@@ -5,7 +5,19 @@ from runpy import run_path
 import pytest
 from PIL import Image
 
-from tilix import Face, Grid, Palette, Shape, block, cube, ramp, render, stairs, wall
+from tilix import (
+    Face,
+    Grid,
+    Palette,
+    Shape,
+    block,
+    cube,
+    ramp,
+    render,
+    stairs,
+    wall,
+    wall_joint,
+)
 
 
 def test_projection_axes_and_negative_coordinates():
@@ -184,6 +196,24 @@ def test_wall_example_renders_at_full_height():
     assert image.mode == "RGBA"
     assert image.size == (97, 139)
     assert image.getchannel("A").getbbox() == (0, 0, 97, 139)
+
+
+def test_cross_roof_and_front_cap_hide_edges_of_the_rear_arms():
+    palette = Palette(top="red", left="green", right="blue", outline="black")
+    joint = wall_joint(
+        "+x", "+y", "-x", "-y", base_height=2, slope_height=2, top_height=4
+    )
+    image = render(joint, palette=palette, padding=0)
+    assert image.size == (145, 163)
+    assert image.getpixel((72, 30)) == palette.top
+    assert image.getpixel((48, 42)) == palette.top
+    assert image.getpixel((96, 42)) == palette.top
+    assert image.getpixel((120, 90)) == palette.right
+    assert image.getpixel((72, 78)) == palette.outline
+    assert (
+        render(joint.translated(2, -3, 1), palette=palette, padding=0).tobytes()
+        == image.tobytes()
+    )
 
 
 def test_fractional_cells_render_at_the_equivalent_native_resolution():
