@@ -131,19 +131,51 @@ def test_perpendicular_wall_exchanges_the_ground_axes_and_side_shades():
         ("+x", "+y", "-x", "-y"),
     ],
 )
-def test_joint_roof_is_one_polygon_with_the_requested_arms(arms):
-    shape = wall_joint(*arms, length=3)
+def test_joint_fits_the_standard_tile_and_reaches_the_requested_edges(arms):
+    shape = wall_joint(*arms)
+    assert all(
+        0 <= x <= 4 and 0 <= y <= 4 for face in shape.faces for x, y, _ in face.vertices
+    )
     roof = shape.faces[-1].vertices
     assert {z for _, _, z in roof} == {4}
-    assert min(x for x, _, _ in roof) == (-5 if "-x" in arms else -1)
-    assert max(x for x, _, _ in roof) == (5 if "+x" in arms else 1)
-    assert min(y for _, y, _ in roof) == (-5 if "-y" in arms else -1)
-    assert max(y for _, y, _ in roof) == (5 if "+y" in arms else 1)
+    assert min(x for x, _, _ in roof) == (0 if "-x" in arms else Fraction(3, 2))
+    assert max(x for x, _, _ in roof) == (4 if "+x" in arms else Fraction(5, 2))
+    assert min(y for _, y, _ in roof) == (0 if "-y" in arms else Fraction(3, 2))
+    assert max(y for _, y, _ in roof) == (4 if "+y" in arms else Fraction(5, 2))
     twice_area = sum(
         x * by - bx * y for (x, y, _), (bx, by, _) in pairwise((*roof, roof[0]))
     )
-    assert twice_area == 2 * (2 * 2 + len(arms) * 4 * 2)
-    assert wall_joint(*reversed(arms), length=3) == shape
+    assert twice_area == 2 + 3 * len(arms)
+    assert wall_joint(*reversed(arms)) == shape
+
+
+@pytest.mark.parametrize(
+    ("axis", "index", "offset"), [("x", 0, (0, 1)), ("y", 1, (1, 0))]
+)
+def test_joint_ends_align_with_centered_straight_walls(axis, index, offset):
+    straight = wall(axis=axis, base_width=2, top_width=1).translated(*offset)
+    corner = wall_joint("+x", "+y")
+    (straight_end,) = [
+        face for face in straight.faces if all(p[index] == 4 for p in face.vertices)
+    ]
+    (corner_end,) = [
+        face for face in corner.faces if all(p[index] == 4 for p in face.vertices)
+    ]
+    assert set(corner_end.vertices) == set(straight_end.vertices)
+    assert corner_end.shade == straight_end.shade
+
+
+def test_joint_can_use_an_explicit_arm_extension_for_a_custom_tile():
+    shape = wall_joint("+x", "+y", "-x", "-y", length=3)
+    roof = shape.faces[-1].vertices
+    for axis in (0, 1):
+        assert min(p[axis] for p in roof) == 0
+        assert max(p[axis] for p in roof) == 8
+
+
+def test_standard_joint_rejects_a_base_too_wide_for_its_arms():
+    with pytest.raises(ValueError, match="base_width"):
+        wall_joint("+x", "+y", base_width=4)
 
 
 @pytest.mark.parametrize("arms", [(), ("+x",), ("+y", "-y"), ("+x", "+x"), ("+x", "z")])

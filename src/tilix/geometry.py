@@ -269,18 +269,20 @@ def _joint_perimeter(arms: tuple[WallDirection, ...]) -> tuple[tuple[int, int], 
 
 def wall_joint(
     *arms: WallDirection,
-    length: Scalar = 2,
-    base_width: Scalar = 4,
+    length: Scalar | None = None,
+    base_width: Scalar = 2,
     base_height: Scalar = 1,
     slope_height: Scalar = 1,
-    top_width: Scalar = 2,
+    top_width: Scalar = 1,
     top_height: Scalar = 2,
 ) -> Shape:
-    """Join tapered walls around (0, 0) using arms '+x', '+y', '-x', or '-y'.
+    """Join tapered walls in a 4×4-cell tile using '+x', '+y', '-x', or '-y'.
 
     Two adjacent arms make a 90-degree corner, three make a T, and four make
-    a cross. Each arm extends length cells past the central base square.
-    Widths and tier heights follow the same convention as wall().
+    a cross. By default the joint is centered at (2, 2) and each arm reaches
+    the corresponding tile edge. Set length to specify the arm's extension
+    past the central base square and use a custom tile size. Widths and tier
+    heights follow the same convention as wall().
     """
     if any(arm not in ("+x", "+y", "-x", "-y") for arm in arms):
         raise ValueError("arms must be '+x', '+y', '-x', or '-y'")
@@ -288,7 +290,6 @@ def wall_joint(
         raise ValueError("a wall joint needs two to four distinct arms")
     if len(arms) == 2 and arms[0][1] == arms[1][1]:
         raise ValueError("a two-arm wall joint needs perpendicular arms")
-    length = _positive(length, "length")
     base_width, base_height, slope_height, top_width, top_height = _wall_profile(
         base_width, base_height, slope_height, top_width, top_height
     )
@@ -296,9 +297,11 @@ def wall_joint(
     height = shoulder + top_height
     outer = base_width / 2
     inner = top_width / 2
-    reach = outer + length
-    base_coords = (-reach, -outer, outer, reach)
-    top_coords = (-reach, -inner, inner, reach)
+    center = Fraction(2) if length is None else outer + _positive(length, "length")
+    if outer >= center:
+        raise ValueError("base_width must be less than 4 for a standard wall joint")
+    base_coords = (0, center - outer, center + outer, 2 * center)
+    top_coords = (0, center - inner, center + inner, 2 * center)
     perimeter = _joint_perimeter(arms)
     faces = []
     for a, b in pairwise((*perimeter, perimeter[0])):

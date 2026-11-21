@@ -52,6 +52,9 @@ def main() -> None:
     output = Path("output")
     output.mkdir(exist_ok=True)
     standard_wall = dict(base_height=2, slope_height=2, top_height=4)
+    thin_wall = dict(
+        base_width=2, top_width=1, base_height=2, slope_height=1, top_height=5
+    )
     corners = {
         "wall_corner_positive_x_positive_y": ("+x", "+y"),
         "wall_corner_positive_y_negative_x": ("+y", "-x"),
@@ -77,18 +80,11 @@ def main() -> None:
             base_width=3,
             top_width=1,
             **standard_wall,
-        ),
-        "wall_thin": wall(
-            length=BLOCK_CELLS,
-            base_width=2,
-            base_height=2,
-            slope_height=1,
-            top_width=1,
-            top_height=5,
-        ),
-        "wall_cross": wall_joint("+x", "+y", "-x", "-y", **standard_wall),
+        ).translated(y=Fraction(1, 2)),
+        "wall_thin": wall(**thin_wall).translated(y=1),
+        "wall_cross": wall_joint("+x", "+y", "-x", "-y", **thin_wall),
         **{
-            name: wall_joint(*arms, **standard_wall)
+            name: wall_joint(*arms, **thin_wall)
             for variants in (corners, tees)
             for name, arms in variants.items()
         },

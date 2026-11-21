@@ -44,7 +44,8 @@ The third variant, `wall_thin.png`, reduces the base width to two cells and keep
 the one-cell top width and one-block length. Its base, slope, and top heights are
 2 + 1 + 5 cells, giving a total height of eight cells.
 The gallery also includes `wall_y.png`, four 90-degree corners, four T-joints
-labeled by stem direction, and a four-way join.
+labeled by stem direction, and a four-way join. Every wall sprite fits within
+one 4×4-cell tile. The joints use the same profile as `wall_thin.png`.
 
 ## Use the library
 
@@ -80,7 +81,7 @@ toward y=depth. Dimensions must be positive and finite.
 | `ramp(width=4, depth=4, height=4)` | Independent dimensions | Solid sloping wedge |
 | `stairs(width=4, depth=4, height=4, *, steps=4)` | Dimensions and positive integer step count | Equal treads and risers |
 | `wall(length=4, *, axis="x", …)` | Length, axis, two widths, and three tier heights | Straight wall with sloping shoulders |
-| `wall_joint(*arms, length=2, …)` | Arm directions, arm length, and the same wall widths and tier heights | 90-degree corner, T-joint, or four-way cross |
+| `wall_joint(*arms, length=None, …)` | Arm directions, optional arm extension, widths, and tier heights | 90-degree corner, T-joint, or four-way cross |
 
 Straight walls run along +x by default. Use `axis="y"` for the perpendicular
 wall. The upper wall is centered on the base, with `top_width <= base_width`.
@@ -102,15 +103,21 @@ shape = wall(
 render(shape).save("wall.png")
 ```
 
-Joints are centered at `(0, 0)`. Each arm extends `length` cells past the edge of
-the central base square. Use `"+x"`, `"+y"`, `"-x"`, and `"-y"` to choose the
-arms. Two perpendicular arms form a corner, three form a T, and all four form
-a cross. Each joint has a continuous roof and the renderer hides occluded edges.
+By default, joints are centered at `(2, 2)` with a two-cell base width and a
+one-cell top width. Each arm reaches its tile edge at coordinate 0 or 4.
+Use `"+x"`, `"+y"`, `"-x"`, and `"-y"` to choose the arms. Two perpendicular
+arms form a corner, three form a T, and all four form a cross. Each joint has a
+continuous roof and the renderer hides occluded edges. An explicit `length`
+sets the extension beyond the central square for a custom tile whose side
+measures `base_width + 2 * length`.
 
 ```python
 from tilix import render, wall, wall_joint
 
-render(wall(axis="y")).save("wall_y.png")
+straight_x = wall(base_width=2, top_width=1).translated(y=1)
+straight_y = wall(axis="y", base_width=2, top_width=1).translated(x=1)
+render(straight_x).save("wall_tile_x.png")
+render(straight_y).save("wall_tile_y.png")
 render(wall_joint("+x", "+y")).save("corner.png")
 render(wall_joint("+x", "-x", "+y")).save("t_positive_y.png")
 render(wall_joint("+x", "-x", "+y", "-y")).save("cross.png")

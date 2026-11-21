@@ -201,15 +201,15 @@ def test_wall_example_renders_at_full_height():
 def test_cross_roof_and_front_cap_hide_edges_of_the_rear_arms():
     palette = Palette(top="red", left="green", right="blue", outline="black")
     joint = wall_joint(
-        "+x", "+y", "-x", "-y", base_height=2, slope_height=2, top_height=4
+        "+x", "+y", "-x", "-y", base_height=2, slope_height=1, top_height=5
     )
     image = render(joint, palette=palette, padding=0)
-    assert image.size == (145, 163)
-    assert image.getpixel((72, 30)) == palette.top
-    assert image.getpixel((48, 42)) == palette.top
-    assert image.getpixel((96, 42)) == palette.top
-    assert image.getpixel((120, 90)) == palette.right
-    assert image.getpixel((72, 78)) == palette.outline
+    assert image.size == (73, 130)
+    assert image.getpixel((36, 15)) == palette.top
+    assert image.getpixel((24, 21)) == palette.top
+    assert image.getpixel((48, 21)) == palette.top
+    assert image.getpixel((60, 63)) == palette.right
+    assert image.getpixel((36, 57)) == palette.outline
     assert (
         render(joint.translated(2, -3, 1), palette=palette, padding=0).tobytes()
         == image.tobytes()
